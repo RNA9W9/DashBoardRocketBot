@@ -1,0 +1,34 @@
+# Archivos de Git
+.git
+.gitignore
+
+# Archivos de Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache
+.coverage
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Documentación
+README.md
+*.md
+
+# Archivos de desarrollo
+.vscode/
+.idea/
+
+# Archivos temporales
+*.tmp
+*.log
