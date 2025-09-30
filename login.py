@@ -114,14 +114,30 @@ def extractor(cadena_str):
 
 #print(hola)
 
-
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     Token = InicioSession()
-
     hola = extractor(json.dumps(Token))  
+
+    # Diccionario con procesos y su tiempo fijo
+    tiempos_fijos = {
+        "Focuss": "00:01:30",
+        "Dian": "00:07:00",
+        "Sugerecias MRO": "00:00:08",
+        "Costos": "00:02:45",
+        "Tasa de Cambio": "00:03:00",
+        "Terminacion Corte": "00:02:00",
+        "GenerarTrabajosStockPrincipal": "00:02:00",
+        "EnvioCartaBienvenida": "00:01:30",
+        "Completado Trabajos": "00:02:30",
+    }
+
+    # Agregar campo extra según el proceso
+    for item in hola['data']:
+        item["tiempo_fijo"] = tiempos_fijos.get(item.get("process"), "")
+
     html_template = """
     <!DOCTYPE html>
     <html lang="es">
@@ -129,50 +145,15 @@ def home():
         <meta charset="UTF-8">
         <title>Ejecuciones de Robots</title>
         <style>
-            body {
-                font-family: Arial, sans-serif;
-                background-color: #f8f9fa;
-                margin: 0;
-                padding: 0;
-            }
-            .header {
-                background-color: #c00;
-                color: white;
-                text-align: center;
-                padding: 20px;
-                font-size: 24px;
-                font-weight: bold;
-            }
-            .table-container {
-                margin: 30px auto;
-                width: 80%;
-                background: white;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-            }
-            th, td {
-                padding: 12px;
-                text-align: center;
-            }
-            th {
-                background-color: #f2f2f2;
-                color: #333;
-            }
-            tr:nth-child(even) {
-                background-color: #f9f9f9;
-            }
-            tr:hover {
-                background-color: #f1f1f1;
-            }
-            td {
-                border-bottom: 1px solid #ddd;
-            }
+            body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+            .header { background-color: #c00; color: white; text-align: center; padding: 20px; font-size: 24px; font-weight: bold; }
+            .table-container { margin: 30px auto; width: 80%; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { padding: 12px; text-align: center; }
+            th { background-color: #f2f2f2; color: #333; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            tr:hover { background-color: #f1f1f1; }
+            td { border-bottom: 1px solid #ddd; }
         </style>
     </head>
     <body>
@@ -184,6 +165,7 @@ def home():
                         <th>Proceso</th>
                         <th>Robot</th>
                         <th>Duración</th>
+                        <th>Tiempo Fijo</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -192,6 +174,7 @@ def home():
                         <td>{{ item.process }}</td>
                         <td>{{ item.robot }}</td>
                         <td>{{ item.duration }}</td>
+                        <td>{{ item.tiempo_fijo }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -202,6 +185,7 @@ def home():
     """
 
     return render_template_string(html_template, data=hola['data'])
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7888, debug=False)
