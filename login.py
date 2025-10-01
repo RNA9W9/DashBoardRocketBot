@@ -1,6 +1,7 @@
 import requests
 import json
 from flask import Flask, render_template_string
+from datetime import datetime, timedelta
 
 def InicioSession ():
 
@@ -54,13 +55,14 @@ def extractor(cadena_str):
     data = json.loads(cadena_str)  
     
     fecha_hoy = datetime.today().strftime("%Y-%m-%d")
+    fecha_ayer = (datetime.now() - timedelta(days=1)).strftime('%m/%d/%Y') 
 
     # Nueva URL
     url = "https://orchestrator.myrb.io/api/robots/execution"
 
     # Body dinámico con fecha actual
     body = {
-        "started": fecha_hoy,
+        "started": fecha_ayer,
         "ended": fecha_hoy
     }
 
@@ -106,8 +108,51 @@ def extractor(cadena_str):
     response = requests.post(url, headers=headers, json=payload)
     print("Correo enviado:", response.status_code, response.text)
 
+def extractor1(cadena_str):
+    import json
+    import requests
+
+    # convierte string → dict
+    data = json.loads(cadena_str)
+
+    # Nueva URL (de tu curl)
+    url = "https://orchestrator.myrb.io/api/insight/66ba07a25e777"
+
+    headers = {
+        "accept": "*/*",
+        "accept-language": "es-419,es;q=0.9,en;q=0.8",
+        "authorization": f"Bearer {data['token']['data']}",  # token dinámico
+        "content-length": "0",
+        "origin": "https://orchestrator.myrb.io",
+        "priority": "u=1, i",
+        "referer": "https://orchestrator.myrb.io/",
+        "sec-ch-ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    }
+
+    cookies = {
+        "auth.strategy": "local",
+        "auth.redirect": "%2Finsight%2Fcalendar",
+        "auth._token.local": f"Bearer%20{data['token']['data']}",
+        "auth._token_expiration.local": f"{data['token_expiration']}",
+        "AWSALB": f"{data['AWSALB']}",
+        "AWSALBCORS": f"{data['AWSALBCORS']}",
+    }
+
+    # POST sin body (igual que curl: content-length=0)
+    response = requests.post(url, headers=headers, cookies=cookies)
+    print(response)
+    return response.json()
 
 
+Token = InicioSession()
+response = extractor1(json.dumps(Token))
+print(response)
 #Token = InicioSession()
 
 #hola = extractor(json.dumps(Token))  
@@ -117,14 +162,36 @@ def extractor(cadena_str):
 app = Flask(__name__)
 
 @app.route("/")
+
 def home():
     Token = InicioSession()
+
+    # 👉 Llamar extractor1 y mostrarlo en consola
+    respuesta1 = extractor1(json.dumps(Token))
+    print("📌 Respuesta extractor1:", respuesta1)
+
     hola = extractor(json.dumps(Token))  
 
-    # Diccionario con procesos y su tiempo fijo
+    # Horarios programados
+    horarios_ejecucion = {
+        "EnvioCartaBienvenida": ["06:55:00"],
+        "Dian": ["01:00:00"],
+        "Focuss": ["05:30:00", "09:00:00", "13:35:00", "22:50:00"],
+        "Sugerecias MRO": ["05:55:00"],
+        "Tasa de Cambio": ["06:30:00"],
+        "Completado Trabajos": ["07:00:00"],
+        "Terminacion Corte": ["07:10:00"],
+        "GenerarTrabajosStockPrincipal": ["10:30:00"],
+        "Costos": ["10:00:00", "15:00:00", "19:00:00"],
+        "Procesado XML": ["17:00:00"],
+        "Envio Orden Compra": ["19:30:00"],
+        "Notas Credito": ["18:00:00"],
+    }
+
+    # Tiempos fijos de procesos
     tiempos_fijos = {
         "Focuss": "00:01:30",
-        "Dian": "00:07:00",
+        "Dian": "00:07:30",
         "Sugerecias MRO": "00:00:08",
         "Costos": "00:02:45",
         "Tasa de Cambio": "00:03:00",
@@ -132,12 +199,65 @@ def home():
         "GenerarTrabajosStockPrincipal": "00:02:00",
         "EnvioCartaBienvenida": "00:01:30",
         "Completado Trabajos": "00:02:30",
+        "Procesado XML": "00:30:00",
+        "Envio Orden Compra": "00:07:00",
+        "Notas Credito": "00:01:30",
     }
 
-    # Agregar campo extra según el proceso
-    for item in hola['data']:
-        item["tiempo_fijo"] = tiempos_fijos.get(item.get("process"), "")
+    margen = timedelta(minutes=1)  # tolerancia de 1 minuto
+    fecha_actual = datetime.now()
+    fechas_a_revisar = [fecha_actual.date(), (fecha_actual - timedelta(days=1)).date()]  # HOY y AYER
 
+    # Guardar ejecuciones reales por proceso
+    ejecuciones_dict = {}
+    for item in hola['data']:
+        hora_real = datetime.fromisoformat(item['start'].replace("Z", ""))
+        ejecuciones_dict.setdefault(item['process'], []).append({
+            "hora": hora_real,
+            "duration": item.get("duration", "-"),
+            "robot": item.get("robot", "-")
+        })
+
+    # Generar lista final con todos los horarios programados
+    resultados = []
+    for proceso, horarios in horarios_ejecucion.items():
+        for fecha in fechas_a_revisar:
+            for hora in horarios:
+                hora_programada = datetime.strptime(
+                    f"{fecha} {hora}", "%Y-%m-%d %H:%M:%S"
+                )
+
+                estado = "❌ No se ejecutó"
+                start = hora_programada.strftime("%Y-%m-%d %H:%M:%S")
+                duration = "-"
+                robot = "-"
+
+                # Revisar ejecuciones reales del proceso
+                for ejec in ejecuciones_dict.get(proceso, []):
+                    if hora_programada <= ejec["hora"] <= hora_programada + margen:
+                        estado = "✅ Ejecutado"
+                        start = ejec["hora"].strftime("%Y-%m-%d %H:%M:%S")
+                        duration = ejec["duration"]
+                        robot = ejec["robot"]
+                        break
+
+                # Si aún no llega la hora → "todavía no se ejecuta"
+                if fecha == fecha_actual.date() and fecha_actual < hora_programada:
+                    estado = "⏳ Todavía no se ejecuta"
+
+                resultados.append({
+                    "process": proceso,
+                    "robot": robot,
+                    "estado": estado,
+                    "start": start,
+                    "duration": duration,
+                    "tiempo_fijo": tiempos_fijos.get(proceso, "")
+                })
+
+    # Ordenar por hora programada
+    resultados.sort(key=lambda x: datetime.strptime(x['start'], "%Y-%m-%d %H:%M:%S"))
+
+    # HTML
     html_template = """
     <!DOCTYPE html>
     <html lang="es">
@@ -164,6 +284,8 @@ def home():
                     <tr>
                         <th>Proceso</th>
                         <th>Robot</th>
+                        <th>Estado</th>
+                        <th>Horario / Ejecución</th>
                         <th>Duración</th>
                         <th>Tiempo Fijo</th>
                     </tr>
@@ -173,6 +295,8 @@ def home():
                     <tr>
                         <td>{{ item.process }}</td>
                         <td>{{ item.robot }}</td>
+                        <td>{{ item.estado }}</td>
+                        <td>{{ item.start }}</td>
                         <td>{{ item.duration }}</td>
                         <td>{{ item.tiempo_fijo }}</td>
                     </tr>
@@ -184,7 +308,10 @@ def home():
     </html>
     """
 
-    return render_template_string(html_template, data=hola['data'])
+    return render_template_string(html_template, data=resultados)
+
+
+
 
 
 if __name__ == "__main__":
